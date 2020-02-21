@@ -3,11 +3,16 @@
 #include <loader.h>
 #include <hooks.h>
 #include "ghidra_export.h"
+#include <nlohmann/json.hpp>
+#include <filesystem>
+#include <fstream>
 
 #include <set>
 #include <map>
 
 using namespace loader;
+
+nlohmann::json ConfigFile;
 
 template<typename T>
 inline T* offsetPtr(void* ptr, int offset) { return (T*)(((char*)ptr) + offset); }
@@ -17,8 +22,8 @@ static void* offsetPtr(void* ptr, int offset) { return offsetPtr<void>(ptr, offs
 HOOKFUNC(AddPartTimer, void*, void* timerMgr, unsigned int index, float timerStart)
 {
 	auto ret = originalAddPartTimer(timerMgr, index, timerStart);
-	*offsetPtr<float>(ret, 0xc) = 120;
-	LOG(INFO) << "AddPartTimer lengthening tenderize timer " << 120;
+	*offsetPtr<float>(ret, 0xc) = ConfigFile.value<float>("duration", 120);
+	LOG(INFO) << "AddPartTimer lengthening tenderize timer " << ConfigFile.value<float>("duration", 120);
 	return ret;
 }
 
@@ -30,6 +35,13 @@ void onLoad()
 		LOG(ERR) << "Wrong version";
 		return;
 	}
+
+	ConfigFile = nlohmann::json::object();
+	std::ifstream config("nativePC\\plugins\\LongerTenderizeConfig.json");
+	if (config.fail()) return;
+
+	config >> ConfigFile;
+	LOG(INFO) << "Found config file";
 
 	MH_Initialize();
 
