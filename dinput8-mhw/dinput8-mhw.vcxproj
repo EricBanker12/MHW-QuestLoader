@@ -195,6 +195,7 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="ghidra_export.h" />
     <ClInclude Include="hooks.h" />
     <ClInclude Include="loader.h" />
     <ClInclude Include="dll.h" />

@@ -2,12 +2,12 @@
 #include <windows.h>
 #include <loader.h>
 #include <hooks.h>
+#include "ghidra_export.h"
 
 #include <set>
+#include <map>
 
 using namespace loader;
-
-#define MonsterAddPartTimerAddress 0x1578993d0
 
 template<typename T>
 inline T* offsetPtr(void* ptr, int offset) { return (T*)(((char*)ptr) + offset); }
@@ -16,24 +16,24 @@ static void* offsetPtr(void* ptr, int offset) { return offsetPtr<void>(ptr, offs
 
 HOOKFUNC(AddPartTimer, void*, void* timerMgr, unsigned int index, float timerStart)
 {
-	float* duration = offsetPtr<float>(timerMgr, 0x4a0);
-	LOG(INFO) << "AddPArtTimer Increasing tenderize timer duration";
-	*duration = 120;
-	return originalAddPartTimer(timerMgr, index, timerStart);
+	auto ret = originalAddPartTimer(timerMgr, index, timerStart);
+	*offsetPtr<float>(ret, 0xc) = 120;
+	LOG(INFO) << "AddPartTimer lengthening tenderize timer " << 120;
+	return ret;
 }
 
 void onLoad()
 {
-
 	LOG(INFO) << "LongerTenderize Loading...";
-	if (std::string(GameVersion) != "402862") {
+	LOG(INFO) << GameVersion;
+	if (std::string(GameVersion) != "404549") {
 		LOG(ERR) << "Wrong version";
 		return;
 	}
 
-    MH_Initialize();
+	MH_Initialize();
 
-	AddHook(AddPartTimer, MonsterAddPartTimerAddress);
+	AddHook(AddPartTimer, MH::Monster_AddPartTimer);
 
 	MH_ApplyQueued();
 
