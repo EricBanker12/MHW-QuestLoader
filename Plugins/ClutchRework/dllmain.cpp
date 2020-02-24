@@ -19,6 +19,13 @@ inline T* offsetPtr(void* ptr, int offset) { return (T*)(((char*)ptr) + offset);
 
 static void* offsetPtr(void* ptr, int offset) { return offsetPtr<void>(ptr, offset); }
 
+HOOKFUNC(TenderizePartMP, void, void* monster, long long* params)
+{
+	LOG(INFO) << "TenderizePartMP";
+	auto ret = originalTenderizePartMP(monster, params);
+	return ret;
+}
+
 HOOKFUNC(AddPartTimer, void*, void* timerMgr, unsigned int index, float timerStart)
 {
 	auto ret = originalAddPartTimer(timerMgr, index, timerStart);
