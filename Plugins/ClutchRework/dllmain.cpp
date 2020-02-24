@@ -39,7 +39,7 @@ void onLoad()
 	LOG(INFO) << "LongerTenderize Loading...";
 	LOG(INFO) << GameVersion;
 	if (std::string(GameVersion) != "404549") {
-		LOG(ERR) << "Wrong version";
+		LOG(ERR) << "ClutchRework: Wrong version";
 		return;
 	}
 
