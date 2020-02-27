@@ -6,6 +6,7 @@
 #include <nlohmann/json.hpp>
 #include <filesystem>
 #include <fstream>
+#include <tlhelp32.h>
 
 #include <set>
 #include <map>
@@ -14,16 +15,81 @@ using namespace loader;
 
 nlohmann::json ConfigFile;
 
+HANDLE phandle;
+DWORD_PTR playersPtr = 0x144fa7078;
+DWORD_PTR playersAddress;
+
 template<typename T>
 inline T* offsetPtr(void* ptr, int offset) { return (T*)(((char*)ptr) + offset); }
 
 static void* offsetPtr(void* ptr, int offset) { return offsetPtr<void>(ptr, offset); }
 
+// https://stackoverflow.com/a/55030118
+DWORD FindProcessId(const std::wstring& processName)
+{
+	PROCESSENTRY32 processInfo;
+	processInfo.dwSize = sizeof(processInfo);
+
+	HANDLE processesSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, NULL);
+	if (processesSnapshot == INVALID_HANDLE_VALUE) {
+		return 0;
+	}
+
+	Process32First(processesSnapshot, &processInfo);
+	if (!processName.compare(processInfo.szExeFile))
+	{
+		CloseHandle(processesSnapshot);
+		return processInfo.th32ProcessID;
+	}
+
+	while (Process32Next(processesSnapshot, &processInfo))
+	{
+		if (!processName.compare(processInfo.szExeFile))
+		{
+			CloseHandle(processesSnapshot);
+			return processInfo.th32ProcessID;
+		}
+	}
+
+	CloseHandle(processesSnapshot);
+	return 0;
+}
+
+bool checkMultiplayer()
+{
+	// check memory for other players
+	if (ConfigFile.value<bool>("disableMultiplayerCheck", false)) {
+		return false;
+	}
+	if (!phandle or !playersAddress) {
+		if (phandle) {
+			CloseHandle(phandle);
+		}
+		DWORD procID = FindProcessId(L"MonsterHunterWorld.exe");
+		phandle = OpenProcess(PROCESS_VM_READ, FALSE, procID);
+		ReadProcessMemory(phandle, (LPCVOID)playersPtr, &playersAddress, sizeof(playersAddress), 0);
+	}
+	int counter = 0;
+	for (int i = 0; i < 4; i += 1) {
+		char player;
+		int playerOffset = 0x21 * i;
+		ReadProcessMemory(phandle, (LPCVOID)(playersAddress+0x532ED+playerOffset), &player, sizeof(player), 0);
+		if (player != 0x0) {
+			counter += 1;
+		}
+	}
+	LOG(INFO) << "LongerTenderize: multiplayer " << (counter > 1) ;
+	return counter > 1;
+}
+
 HOOKFUNC(AddPartTimer, void*, void* timerMgr, unsigned int index, float timerStart)
 {
 	auto ret = originalAddPartTimer(timerMgr, index, timerStart);
-	*offsetPtr<float>(ret, 0xc) = ConfigFile.value<float>("duration", 120);
-	LOG(INFO) << "AddPartTimer lengthening tenderize timer " << ConfigFile.value<float>("duration", 120);
+	if (!checkMultiplayer()) {
+		float duration = ConfigFile.value<float>("duration", 120);
+		*offsetPtr<float>(ret, 0xc) = duration;
+		LOG(INFO) << "LongerTenderize: lengthening tenderize timer " << duration;
+	}
 	return ret;
 }
 
