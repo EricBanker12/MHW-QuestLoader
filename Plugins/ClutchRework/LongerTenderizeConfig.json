@@ -1,4 +1,18 @@
 {
-	"disableMultiplayerCheck": false,
-	"duration": 120
+	"1-player": {
+		"enabled": true,
+		"duration": 120
+	},
+	"2-player": {
+		"enabled": false,
+		"duration": 120
+	},
+	"3-player": {
+		"enabled": false,
+		"duration": 120
+	},
+	"4-player": {
+		"enabled": false,
+		"duration": 120
+	}
 }

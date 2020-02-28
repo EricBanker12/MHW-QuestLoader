@@ -55,7 +55,7 @@ DWORD FindProcessId(const std::wstring& processName)
 	return 0;
 }
 
-bool checkMultiplayer()
+int countPlayers()
 {
 	// check memory for other players
 	if (ConfigFile.value<bool>("disableMultiplayerCheck", false)) {
@@ -78,17 +78,30 @@ bool checkMultiplayer()
 			counter += 1;
 		}
 	}
-	LOG(INFO) << "LongerTenderize: multiplayer " << (counter > 1) ;
-	return counter > 1;
+	// bugfix for solo arena
+	if (counter == 0) {
+		counter = 1;
+	}
+	return counter;
 }
 
 HOOKFUNC(AddPartTimer, void*, void* timerMgr, unsigned int index, float timerStart)
 {
 	auto ret = originalAddPartTimer(timerMgr, index, timerStart);
-	if (!checkMultiplayer()) {
-		float duration = ConfigFile.value<float>("duration", 120);
+
+	int playerCount = countPlayers();
+	char playerCountStr [16];
+	sprintf_s(playerCountStr, sizeof(playerCountStr), "%d-player", playerCount);
+	nlohmann::json config = ConfigFile.value<nlohmann::json>(playerCountStr, nlohmann::json::object());
+
+	bool enabled = config.value<bool>("enabled", false);
+	if (enabled) {
+		float duration = config.value<float>("duration", 120);
 		*offsetPtr<float>(ret, 0xc) = duration;
 		LOG(INFO) << "LongerTenderize: lengthening tenderize timer " << duration;
+	}
+	else {
+		LOG(INFO) << "LongerTenderize: " << playerCountStr << " is disabled.";
 	}
 	return ret;
 }
