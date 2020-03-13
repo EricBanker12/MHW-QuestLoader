@@ -19,11 +19,11 @@ using namespace loader;
 std::map<std::string, std::string> nativePCList;
 bool outputEveryPath = false;
 
-HOOKFUNC(FilePathCheck, void*, void* _0, const char* path, void* _1)
+CreateHook(MH::File::FilePathCheck, FilePathCheck, void*, void* _0, const char* path, void* _1)
 {
 	std::string spath(path);
 	LOG(INFO) << "File loaded : " << spath;
-	return originalFilePathCheck(_0, path, _1);
+	return original(_0, path, _1);
 }
 
 void InjectForceNativePC()
@@ -38,6 +38,6 @@ void InjectForceNativePC()
 
 	if (outputEveryPath)
 	{
-		AddHook(FilePathCheck, MH::File::FilePathCheck);
+		QueueHook(FilePathCheck);
 	}
 }

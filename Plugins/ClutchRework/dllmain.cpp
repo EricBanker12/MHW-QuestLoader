@@ -1,12 +1,13 @@
 // dllmain.cpp : Defines the entry point for the DLL application.
 #include <windows.h>
 #include <loader.h>
-#include <hooks.h>
+
 #include "ghidra_export.h"
 #include <nlohmann/json.hpp>
 #include <filesystem>
 #include <fstream>
 #include <tlhelp32.h>
+#include "util.h"
 
 #include <set>
 #include <map>
@@ -18,9 +19,6 @@ nlohmann::json ConfigFile;
 HANDLE phandle;
 DWORD_PTR playersPtr = 0x144fa7078;
 DWORD_PTR playersAddress;
-
-template<typename T>
-inline T* offsetPtr(void* ptr, int offset) { return (T*)(((char*)ptr) + offset); }
 
 static void* offsetPtr(void* ptr, int offset) { return offsetPtr<void>(ptr, offset); }
 
@@ -85,9 +83,9 @@ int countPlayers()
 	return counter;
 }
 
-HOOKFUNC(AddPartTimer, void*, void* timerMgr, unsigned int index, float timerStart)
+CreateHook(MH::Monster::SoftenTimers::AddWoundTimer, AddPartTimer, void*, void* timerMgr, unsigned int index, float timerStart)
 {
-	auto ret = originalAddPartTimer(timerMgr, index, timerStart);
+	auto ret = original(timerMgr, index, timerStart);
 
 	int playerCount = countPlayers();
 	char playerCountStr [16];
@@ -123,7 +121,8 @@ void onLoad()
 
 	MH_Initialize();
 
-	AddHook(AddPartTimer, MH::Monster_AddPartTimer);
+	QueueHook(AddPartTimer);
+	HookLambda(MH::GameVersion::CalcNum, []() -> undefined8 {return 1404549; });
 
 	MH_ApplyQueued();
 

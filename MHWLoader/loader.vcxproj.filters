@@ -38,16 +38,7 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <None Include="dinput8.def">
-      <Filter>Source Files</Filter>
-    </None>
-    <None Include="packages.config" />
-  </ItemGroup>
-  <ItemGroup>
     <ClInclude Include="dll.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="hooks.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="loader.h">
@@ -56,9 +47,12 @@
     <ClInclude Include="ghidra_export.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="util.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <CopyFileToFolders Include="dinput-config.json">
+    <CopyFileToFolders Include="loader-config.json">
       <Filter>Resource Files</Filter>
     </CopyFileToFolders>
   </ItemGroup>

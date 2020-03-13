@@ -6,10 +6,7 @@ using namespace loader;
 
 class Quest {
 public:
-
-
-	
-	long long file_id;
+	int file_id;
 
 	struct {
 		void* vtable = nullptr;
@@ -31,9 +28,10 @@ public:
 	}
 };
 
-static const int	QuestMinId = 90000;
-size_t				AddedQuestCount;
-std::vector<Quest>	AddedQuests;
+static const int QuestMinId = 90000;
+size_t AddedQuestCount;
+std::vector<Quest> AddedQuests;
+std::unordered_map<int, Quest*> QuestIds;
 
 static void PopulateQuests() 
 {
@@ -51,72 +49,89 @@ static void PopulateQuests()
 		LOG(WARN) << "Registered quest at " << entry.path().string();
 		AddedQuests.push_back(Quest(id));
 	}
+
+	for (auto& quest : AddedQuests) {
+		QuestIds.insert({ quest.file_id, &quest });
+	}
 	AddedQuestCount = AddedQuests.size();
 }
 
+bool QuestExists(int id) {
+	return QuestIds.find(id) != QuestIds.end();
+}
 
-HOOKFUNC(CheckQuestComplete, bool, void* save, int id)
+
+Quest* GetQuest(int id) {
+	return QuestIds.find(id)->second;
+}
+
+CreateHook(MH::Quest::CheckComplete, CheckQuestComplete, bool, void* save, int id)
 {
-	if (id >= QuestMinId)
+	if (QuestExists(id))
 	{
 		LOG(INFO) << "CheckQuestComplete : " << id;
 		return true;
 	}
-	return originalCheckQuestComplete(save, id);
+	return original(save, id);
 }
 
-HOOKFUNC(CheckQuestProgress, bool, void* save, int id)
+CreateHook(MH::Quest::CheckProgress, CheckQuestProgress, bool, void* save, int id)
 {
-	if (id >= QuestMinId)
+	if (QuestExists(id))
 	{
 		LOG(INFO) << "CheckQuestProgress: " << id;
 		return true;
 	}
-	return originalCheckQuestProgress(save, id);
+	return original(save, id);
 }
 
-HOOKFUNC(CheckQuestFlag, bool, int id)
+CreateHook(MH::Quest::UnknFilterFlag, CheckQuestFlag, bool, int id)
 {
-	if (id >= QuestMinId)
+	if (QuestExists(id))
 	{
-		LOG(INFO) << "CheckQuestFlag : " << id;
+		LOG(DEBUG) << "CheckQuestFlag : " << id;
 		return true;
 	}
-	return originalCheckQuestFlag(id);
+	return original(id);
 }
 
 
-HOOKFUNC(QuestCount, int, void)
+CreateHook(MH::Quest::OptionalCount, QuestCount, int, void)
 {
-	LOG(INFO) << "QuestCount";
-	return originalQuestCount() + (int) AddedQuestCount;
+	LOG(DEBUG) << "QuestCount";
+	return original() + (int) AddedQuestCount;
 }
 
-HOOKFUNC(QuestFromIndex, int, void* this_ptr, int index)
+CreateHook(MH::Quest::OptionalAt, QuestFromIndex, int, void* this_ptr, int index)
 {
-	if (index >= originalQuestCount())
+	if (index >= QuestCount::original())
 	{
-		LOG(INFO) << "QuestFromIndex :" << index << ":" << AddedQuests[index - originalQuestCount()].file_id;
-		return (int) AddedQuests[index - originalQuestCount()].file_id;
+		size_t newIndex = ((size_t)index) - QuestCount::original();
+		LOG(DEBUG) << "QuestFromIndex :" << index << ":" << AddedQuests[newIndex].file_id;
+		return (int) AddedQuests[newIndex].file_id;
 	}
-	return originalQuestFromIndex(this_ptr, index);
+	return original(this_ptr, index);
 }
 
-HOOKFUNC(CheckStarAndCategory, bool, int questID, int category, int starCount)
+CreateHook(MH::Quest::StarCategoryCheck, CheckStarAndCategory, bool, int questID, int category, int starCount)
 {
-	auto ret = originalCheckStarAndCategory(questID, category, starCount);
-	if (questID >= QuestMinId && category == 1 && starCount == 16)
+	auto ret = original(questID, category, starCount);
+	Quest* found;
+	if (QuestExists(questID))
 	{
-		LOG(INFO) << "CheckStarCategory " << questID;
-		return true;
+		found = GetQuest(questID);
+		LOG(DEBUG) << "CheckStarCategory" << SHOW(questID) << SHOW(found->starcount);
+		if (found->starcount == starCount && category == 1) {
+			return true;
+		}
 	}
 	return ret;
 }
 
-HOOKFUNC(GetQuestCategory, long long, int questID, int unkn)
+CreateHook(MH::Quest::GetCategory, GetQuestCategory, long long, int questID, int unkn)
 {
-	auto ret = originalGetQuestCategory(questID, unkn);
-	if (questID >= QuestMinId) {
+	auto ret = original(questID, unkn);
+	if (QuestExists(questID)) {
 		LOG(DEBUG) << "GetQuestCategory " << questID;
 		return 1;
 	}
@@ -129,12 +144,13 @@ void ModifyQuestData(void* obj, char* file)
 	{
 		if (quest.questPath == std::string(file))
 		{
-			LOG(INFO) << "Quest Data loaded : " << file;
 			*(int*)((char*)obj + 0xb0 + 0x70) = (int) quest.file_id;
+			quest.starcount = *offsetPtr<unsigned char>(obj, 0xb0 + 0x74);
+			LOG(INFO) << "Quest Data loaded : " << file << " " << SHOW(quest.starcount);
+
 		}
 	}
 }
-
 
 void ModifyQuestNoList(void* obj, char* file)
 {
@@ -154,9 +170,9 @@ void ModifyQuestNoList(void* obj, char* file)
 	*questCount += (int) AddedQuestCount;
 }
 
-HOOKFUNC(LoadObjFile, void*, void* fileMgr, void* objDef, char* filename, int flag)
+CreateHook(MH::File::LoadResource, LoadObjFile, void*, void* fileMgr, void* objDef, char* filename, int flag)
 {
-	void* object = originalLoadObjFile(fileMgr, objDef, filename, flag);
+	void* object = original(fileMgr, objDef, filename, flag);
 
 	if (flag == 1)
 	{
@@ -175,16 +191,16 @@ void InjectQuestLoader()
 	LOG(WARN) << "Hooking Quest Loader";
 	PopulateQuests();
 
-	AddHook(QuestCount, MH::Quest_Count);
-	AddHook(QuestFromIndex, MH::Quest_AtIndex);
+	QueueHook(QuestCount);
+	QueueHook(QuestFromIndex);
 
-	AddHook(CheckQuestFlag, MH::Quest_CheckFlag);
-	AddHook(CheckQuestComplete, MH::Quest_CheckComplete);
-	AddHook(CheckQuestProgress, MH::Quest_CheckProgress);
+	QueueHook(CheckQuestFlag);
+	QueueHook(CheckQuestComplete);
+	QueueHook(CheckQuestProgress);
 
-	AddHook(GetQuestCategory, MH::Quest_Category);
-	AddHook(CheckStarAndCategory, MH::Quest_StarCategoryCheck);
+	QueueHook(GetQuestCategory);
+	QueueHook(CheckStarAndCategory);
 
-	AddHook(LoadObjFile, MH::File::LoadResource);
+	QueueHook(LoadObjFile);
 }
 

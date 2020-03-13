@@ -13,7 +13,7 @@
 
 using namespace loader;
 
-const char* loader::GameVersion = "404549";
+const char* loader::GameVersion = "406510";
 const char* invalidVersion = "???";
 
 void InitCodeInjections()
@@ -46,28 +46,24 @@ void LoadAllPluginDlls()
 	}
 }
 
-typedef HRESULT(WINAPI* tDirectInput8Create)(HINSTANCE inst_handle, DWORD version, const IID& r_iid, LPVOID* out_wrapper, LPUNKNOWN p_unk);
-tDirectInput8Create oDirectInput8Create = nullptr;
-
 void Initialize()
 {
-	char syspath[MAX_PATH];
-	GetSystemDirectory(syspath, MAX_PATH);
-	strcat_s(syspath, "\\dinput8.dll");
-	HMODULE hMod = LoadLibrary(syspath);
-	oDirectInput8Create = (tDirectInput8Create)GetProcAddress(hMod, "DirectInput8Create");
-
-	LoadConfig();
-	if (memcmp((const char*)MH::GameVersion, loader::GameVersion, 6) != 0)
-	{
-		GameVersion = invalidVersion;
-		LOG(ERR) << "Build Number check failed.";
-		LOG(ERR) << "Wrong Version of MHW detected";
-		LOG(ERR) << "Loader needs to be updated.";
+	try {
+		LoadConfig();
+		if (memcmp((const char*)MH::GameVersion::String, loader::GameVersion, 6) != 0)
+		{
+			GameVersion = invalidVersion;
+			LOG(ERR) << "Build Number check failed.";
+			LOG(ERR) << "Wrong Version of MHW detected";
+			LOG(ERR) << "Loader needs to be updated.";
+		}
+		LoadAllPluginDlls();
+		InitCodeInjections();
 	}
-
-	LoadAllPluginDlls(); 
-	InitCodeInjections();
+	catch (std::exception e) 
+	{
+		MessageBox(0, "STRACKER'S LOADER ERROR", e.what(), MB_OK);
+	}
 }
 
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved)
@@ -75,13 +71,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 
 	if (ul_reason_for_call == DLL_PROCESS_ATTACH)
 	{
-		DisableThreadLibraryCalls(hModule);
 		Initialize();
 	}
 	return TRUE;
-}
-
-HRESULT WINAPI DirectInput8Create(HINSTANCE inst_handle, DWORD version, const IID& r_iid, LPVOID* out_wrapper, LPUNKNOWN p_unk)
-{
-	return oDirectInput8Create(inst_handle, version, r_iid, out_wrapper, p_unk);
 }
