@@ -107,7 +107,7 @@ CreateHook(MH::Monster::SoftenTimers::AddWoundTimer, AddPartTimer, void*, void* 
 void onLoad()
 {
 	LOG(INFO) << "LongerTenderize Loading...";
-	if (std::string(GameVersion) != "404549") {
+	if (std::string(GameVersion) != "406510") {
 		LOG(ERR) << "LongerTenderize: Wrong version";
 		return;
 	}
@@ -122,7 +122,7 @@ void onLoad()
 	MH_Initialize();
 
 	QueueHook(AddPartTimer);
-	HookLambda(MH::GameVersion::CalcNum, []() -> undefined8 {return 1404549; });
+	// HookLambda(MH::GameVersion::CalcNum, []() -> undefined8 {return 1404549; });
 
 	MH_ApplyQueued();
 
