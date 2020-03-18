@@ -1,113 +1,130 @@
 // dllmain.cpp : Defines the entry point for the DLL application.
-#include <Windows.h>
+#include <windows.h>
 #include <loader.h>
 
 #include "ghidra_export.h"
+#include <nlohmann/json.hpp>
+#include <filesystem>
+#include <fstream>
+#include <tlhelp32.h>
 #include "util.h"
 
 #include <set>
 #include <map>
 
 using namespace loader;
+
+nlohmann::json ConfigFile;
+
+HANDLE phandle;
+DWORD_PTR playersPtr = 0x14f2ca527; // 48 8B 0D ?? ?? ?? ?? 48 8D 54 24 38 C6 44 24 20 00 E8 ?? ?? ?? ?? 48 8B 5C 24 70 48 8B 7C 24 60 48 83 C4 68 C3
+DWORD_PTR playersAddress;
+
 static void* offsetPtr(void* ptr, int offset) { return offsetPtr<void>(ptr, offset); }
 
-void showMessage(std::string message) {
-	MH::Chat::ShowGameMessage(*(undefined**)MH::Chat::MainPtr, &message[0], -1, -1, 0);
-}
+// https://stackoverflow.com/a/55030118
+DWORD FindProcessId(const std::wstring& processName)
+{
+	PROCESSENTRY32 processInfo;
+	processInfo.dwSize = sizeof(processInfo);
 
-int getReactedAction(undefined* monster, int reactionType) {
-	if (MH::Monster::HasEmDmg(monster)) {
-		undefined* emDmg = MH::Monster::GetEmDmg(monster);
-		for (int i = 0; i < MH::Monster::EmDmg::Count(emDmg); ++i) {
-			undefined* entry = MH::Monster::EmDmg::At(emDmg, i);
-			if (*offsetPtr<int>(entry, 0x20) == reactionType) {
-				return *offsetPtr<int>(entry, 0x30);
-			}
+	HANDLE processesSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, NULL);
+	if (processesSnapshot == INVALID_HANDLE_VALUE) {
+		return 0;
+	}
+
+	Process32First(processesSnapshot, &processInfo);
+	if (!processName.compare(processInfo.szExeFile))
+	{
+		CloseHandle(processesSnapshot);
+		return processInfo.th32ProcessID;
+	}
+
+	while (Process32Next(processesSnapshot, &processInfo))
+	{
+		if (!processName.compare(processInfo.szExeFile))
+		{
+			CloseHandle(processesSnapshot);
+			return processInfo.th32ProcessID;
 		}
 	}
+
+	CloseHandle(processesSnapshot);
 	return 0;
 }
 
-struct monsterData {
-	int clawExtendAction = -1;
-	int turnClawActions[2] = { -1, -1 };
-	bool actionUsed = false;
-};
-
-static std::map<void*, monsterData> data;
-
-CreateHook(MH::Monster::CanClawTurn, TurnClawCheck, bool, void* monster)
+int countPlayers()
 {
-	int action = *offsetPtr<int>(monster, 0x61c8 + 0xb0);
-	auto mdata = data[monster];
-	if (action == mdata.clawExtendAction
-		|| action == mdata.turnClawActions[0]
-		|| action == mdata.turnClawActions[1]) {
-		return true;
+	// check memory for other players
+	if (ConfigFile.value<bool>("disableMultiplayerCheck", false)) {
+		return false;
 	}
-	return false;
+	if (!phandle or !playersAddress) {
+		if (phandle) {
+			CloseHandle(phandle);
+		}
+		DWORD procID = FindProcessId(L"MonsterHunterWorld.exe");
+		phandle = OpenProcess(PROCESS_VM_READ, FALSE, procID);
+		ReadProcessMemory(phandle, (LPCVOID)playersPtr, &playersAddress, sizeof(playersAddress), 0);
+	}
+	int counter = 0;
+	for (int i = 0; i < 4; i += 1) {
+		char player;
+		int playerOffset = 0x21 * i;
+		ReadProcessMemory(phandle, (LPCVOID)(playersAddress+0x532ED+playerOffset), &player, sizeof(player), 0);
+		if (player != 0x0) {
+			counter += 1;
+		}
+	}
+	// bugfix for solo arena
+	if (counter == 0) {
+		counter = 1;
+	}
+	return counter;
 }
 
 CreateHook(MH::Monster::SoftenTimers::AddWoundTimer, AddPartTimer, void*, void* timerMgr, unsigned int index, float timerStart)
 {
-	void* monster = offsetPtr<void>(timerMgr, -0x1c3f0);
-	int action = *offsetPtr<int>(monster, 0x61c8 + 0xb0);
-	LOG(INFO) << SHOW(action);
-	if (action != data[monster].clawExtendAction) {
-		showMessage("Wound resisted.");
-		return nullptr;
-	}
-	data[monster].actionUsed = true;
 	auto ret = original(timerMgr, index, timerStart);
-	*offsetPtr<float>(ret, 0xc) = 3000;
-	return ret;
-}
 
-DeclareHook(MH::Monster::LaunchAction, LaunchAction,
-	bool, (undefined* monster, uint id))
-{
-	auto ret = original(monster, id);
-	char* monsterName = offsetPtr<char>(monster, 0x7741);
-	if (monsterName[2] == '0' || monsterName[2] == '1') {
-		if (data[monster].clawExtendAction == -1) {
-			data[monster].clawExtendAction = getReactedAction(monster, 172);
-			data[monster].turnClawActions[0] = getReactedAction(monster, 164);
-			data[monster].turnClawActions[1] = getReactedAction(monster, 165);
-		}
-		data[monster].actionUsed = false;
+	int playerCount = countPlayers();
+	char playerCountStr [16];
+	sprintf_s(playerCountStr, sizeof(playerCountStr), "%d-player", playerCount);
+	nlohmann::json config = ConfigFile.value<nlohmann::json>(playerCountStr, nlohmann::json::object());
+
+	bool enabled = config.value<bool>("enabled", false);
+	if (enabled) {
+		float duration = config.value<float>("duration", 120);
+		*offsetPtr<float>(ret, 0xc) = duration;
+		LOG(INFO) << "LongerTenderize: lengthening tenderize timer " << duration;
+	}
+	else {
+		LOG(INFO) << "LongerTenderize: " << playerCountStr << " is disabled.";
 	}
 	return ret;
-}
-
-DeclareHook(MH::Monster::dtor, CleanupMonster,
-	undefined*, (undefined* monster))
-{
-	data.erase(monster);
-	return original(monster);
 }
 
 void onLoad()
 {
-	LOG(INFO) << "ClutchRework Loading...";
-	LOG(INFO) << GameVersion;
-	if (std::string(GameVersion) != "404549") {
-		LOG(ERR) << "ClutchRework: Wrong version";
+	if (std::string(GameVersion) != "406510") {
+		LOG(ERR) << "LongerTenderize: Wrong version";
 		return;
 	}
+
+	ConfigFile = nlohmann::json::object();
+	std::ifstream config("nativePC\\plugins\\LongerTenderizeConfig.json");
+	if (config.fail()) return;
+
+	config >> ConfigFile;
+	LOG(INFO) << "LongerTenderize: Found config file";
 
 	MH_Initialize();
 
 	QueueHook(AddPartTimer);
-	QueueHook(TurnClawCheck);
-	QueueHook(LaunchAction);
-	QueueHook(CleanupMonster);
-	HookLambda(MH::GameVersion::CalcNum, []() -> undefined8 {return 1404549; });
+	// HookLambda(MH::GameVersion::CalcNum, []() -> undefined8 {return 1404549; });
 
 	MH_ApplyQueued();
-
-	LOG(INFO) << "DONE !";
 }
-
 
 BOOL APIENTRY DllMain( HMODULE hModule,
                        DWORD  ul_reason_for_call,
