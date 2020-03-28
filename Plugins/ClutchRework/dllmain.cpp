@@ -87,9 +87,14 @@ CreateHook(MH::Monster::SoftenTimers::AddWoundTimer, AddPartTimer, void*, void* 
 {
 	auto ret = original(timerMgr, index, timerStart);
 
-	int playerCount = countPlayers();
-	char playerCountStr [16];
-	sprintf_s(playerCountStr, sizeof(playerCountStr), "%d-player", playerCount);
+	// disabled countPlayers() until ReadProcessMemory is fixed.
+	
+	// int playerCount = countPlayers();
+	// char playerCountStr [16];
+	// sprintf_s(playerCountStr, sizeof(playerCountStr), "%d-player", playerCount);
+
+	char playerCountStr [] = "1-player";
+
 	nlohmann::json config = ConfigFile.value<nlohmann::json>(playerCountStr, nlohmann::json::object());
 
 	bool enabled = config.value<bool>("enabled", false);
