@@ -17,7 +17,7 @@ using namespace loader;
 nlohmann::json ConfigFile;
 
 HANDLE phandle;
-DWORD_PTR playersPtr = 0x148067407; // 48 8B 0D ?? ?? ?? ?? 48 8D 54 24 38 C6 44 24 20 00 E8 ?? ?? ?? ?? 48 8B 5C 24 70 48 8B 7C 24 60 48 83 C4 68 C3
+DWORD_PTR playersPtr = 0x14507bb88;
 DWORD_PTR playersAddress;
 
 static void* offsetPtr(void* ptr, int offset) { return offsetPtr<void>(ptr, offset); }
@@ -86,14 +86,10 @@ int countPlayers()
 CreateHook(MH::Monster::SoftenTimers::AddWoundTimer, AddPartTimer, void*, void* timerMgr, unsigned int index, float timerStart)
 {
 	auto ret = original(timerMgr, index, timerStart);
-
-	// disabled countPlayers() until ReadProcessMemory is fixed.
 	
-	// int playerCount = countPlayers();
-	// char playerCountStr [16];
-	// sprintf_s(playerCountStr, sizeof(playerCountStr), "%d-player", playerCount);
-
-	char playerCountStr [] = "1-player";
+	int playerCount = countPlayers();
+	char playerCountStr [16];
+	sprintf_s(playerCountStr, sizeof(playerCountStr), "%d-player", playerCount);
 
 	nlohmann::json config = ConfigFile.value<nlohmann::json>(playerCountStr, nlohmann::json::object());
 
