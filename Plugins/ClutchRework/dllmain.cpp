@@ -17,7 +17,7 @@ using namespace loader;
 nlohmann::json ConfigFile;
 
 HANDLE phandle;
-DWORD_PTR playersPtr = 0x145104b58;
+DWORD_PTR playersPtr = 0x145103AF8;
 DWORD_PTR playersAddress;
 
 static void* offsetPtr(void* ptr, int offset) { return offsetPtr<void>(ptr, offset); }
@@ -107,7 +107,7 @@ CreateHook(MH::Monster::SoftenTimers::AddWoundTimer, AddPartTimer, void*, void* 
 
 void onLoad()
 {
-	if (std::string(GameVersion) != "410014") {
+	if (std::string(GameVersion) != "410918") {
 		LOG(ERR) << "LongerTenderize: Wrong version";
 		return;
 	}
