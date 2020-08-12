@@ -107,7 +107,7 @@ CreateHook(MH::Monster::SoftenTimers::AddWoundTimer, AddPartTimer, void*, void* 
 
 void onLoad()
 {
-	if (std::string(GameVersion) != "414136") {
+	if (std::string(GameVersion) != "416251") {
 		LOG(ERR) << "LongerTenderize: Wrong version";
 		return;
 	}
